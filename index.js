@@ -345,6 +345,7 @@ router.get('/songTopics/:value', function (req, res) {
     `;
     let keys;
     keys = db._query(query).toArray();
+    keys = keys.length;
     /*data = keys[0].comment;
     createWordCloud();
     keys = {'commentsAll': commentsAll, 'commentsUsed': commentsUsed, 'dataCloud': dataCloud, 'listSongs': listSongs, 'wordCounted': wordCounted};*/
