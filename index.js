@@ -313,7 +313,7 @@ router.get('/comments/:value', function (req, res) {
 .description('Retunrs comments for the requested video ids, filters and sort order.');
 
 // TOPIC ///////////////////////////////////////////////////////////////////////////////////////////////////////// */
-/*var data = [];
+var data = [];
 var commentsAll = 0;
 var commentsUsed = 0;
 var dataCloud = [];
@@ -353,7 +353,7 @@ router.get('/songTopics/:value', function (req, res) {
 .description('Returns data from topic analysis (dataCloud, wordCounted, etc.) for the requested video ids.');
 
 /* TOPIC AUXILIARY FUNCTIONS ///////////////////////////////////////////////////////////////////////////////////// */
-/*
+
 function createWordCloud() {
 	var words = [];
 	// Tokenize and clean each [english/german] comment
@@ -480,4 +480,3 @@ function removeStopwords(array, stopWordList){
 	});	
 	return array;
 }
-*/
