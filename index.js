@@ -345,10 +345,9 @@ router.get('/songTopics/:value', function (req, res) {
     `;
     let keys;
     keys = db._query(query).toArray();
-    keys = keys.length;
-    /*data = keys[0].comment;
+    keys.forEach((res) => { data = data.concat(res.comment) });
     createWordCloud();
-    keys = {'commentsAll': commentsAll, 'commentsUsed': commentsUsed, 'dataCloud': dataCloud, 'listSongs': listSongs, 'wordCounted': wordCounted};*/
+    keys = {'commentsAll': commentsAll, 'commentsUsed': commentsUsed, 'dataCloud': dataCloud, 'listSongs': listSongs, 'wordCounted': wordCounted};
     res.send(keys);
     data = []; dataCloud = []; listSongs = []; wordCounted = []; commentsAll = 0; commentsUsed = 0;
 })
