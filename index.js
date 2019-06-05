@@ -6,13 +6,13 @@ const joi = require('joi');
 const router = createRouter();
 
 module.context.use(router);
-/*module.context.use(function (req, res, next) {
+module.context.use(function (req, res, next) {
     if(!req.arangoUser) {
         res.throw(401, 'Not authenticated');
     }
     next();
 });
-*/
+
 // https://www.arangodb.com/docs/stable/foxx-guides-browser.html
 // in your main entry file, e.g. index.js
 module.context.trustProxy = true;
