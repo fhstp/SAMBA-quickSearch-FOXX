@@ -6,13 +6,13 @@ const joi = require('joi');
 const router = createRouter();
 
 module.context.use(router);
-/*module.context.use(function (req, res, next) {
+module.context.use(function (req, res, next) {
     if(!req.arangoUser) {
         res.throw(401, 'Not authenticated');
     }
     next();
 });
-*/
+
 // https://www.arangodb.com/docs/stable/foxx-guides-browser.html
 // in your main entry file, e.g. index.js
 module.context.trustProxy = true;
@@ -167,7 +167,11 @@ for c in Comments
     let langDistrib = (for c in comments 
         collect language = c.c.analysis.mainLanguage with count into nbComments 
         return {"language": language, "nbComments": nbComments})
-    
+
+    let likedComments = (for c in comments 
+        let countLikes = (c.c.snippet.topLevelComment.snippet.likeCount > 0 ? 1 : 0)
+        collect aggregate mcount = SUM(countLikes)
+        RETURN {"count": mcount})
     
     let sentimentDistrib = (for c in comments
 
@@ -193,7 +197,7 @@ for c in Comments
             
         return {"positive": numberOfPositiveComments, "negative": numberOfNegativeComments, "neutral": numberOfNeutral, "NAs": numberOfNAs, "mixed": numberOfMixed})
     
-    return {"publishedAt": publishedAt, "nbComments": length(comments), "languageDistribution": langDistrib, "sentimentDistribution": sentimentDistrib}
+    return {"publishedAt": publishedAt, "nbComments": length(comments), "likedComments": likedComments[0].count, "languageDistribution": langDistrib, "sentimentDistribution": sentimentDistrib}
     )
 
 return {"videoIds": ` + idArray + `, "aggregations": agg}
@@ -249,11 +253,35 @@ router.get('/songStatistics/:value', function (req, res) {
 
 
 router.get('/comments/:value', function (req, res) {
-    let idArray = req.pathParams.value;
-    let startDate = `"2017-06-29T15:48:52.000Z"`;
-    let endDate = `"2018-06-29T15:48:52.000Z"`;
-    let nbComments = 5;
-    
+    let allValues = JSON.parse(req.pathParams.value);
+    let idArray = allValues.idArray;
+    let startDate = "2000-01-29T15:48:52.000Z";
+    let endDate = "3000-12-29T15:48:52.000Z";
+    let nbComments = 25;
+    let order = '';
+
+    if (allValues.startDate) startDate = allValues.startDate;
+    if (allValues.endDate) endDate = allValues.endDate;
+    if (allValues.nbComments) nbComments = allValues.nbComments;
+    if (allValues.order) {
+        switch(allValues.order){
+            case 'repliesAsc':
+                order = 'sort c.snippet.totalReplyCount asc'; break;
+            case 'repliesDesc':
+                order = 'sort c.snippet.totalReplyCount desc'; break;
+            case 'likesAsc':
+                order = 'sort c.snippet.topLevelComment.snippet.likeCount asc'; break;
+            case 'likesDesc':
+                order = 'sort c.snippet.topLevelComment.snippet.likeCount desc'; break;
+            case 'dateAsc':
+                order = 'sort date asc'; break;
+            case 'dateDesc':
+                order = 'sort date desc'; break;
+            default:
+                order = '';
+        }
+    }
+
     let query = `
     /* Parameter examples:
     ["eROJBYpkUMg","twqM56f_cVo"]
@@ -262,35 +290,27 @@ router.get('/comments/:value', function (req, res) {
     5
     */
     let comments = ( for c in Comments
-        filter c.snippet.videoId IN  ` + idArray + `
-        //let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
-        filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601(` + startDate + `) AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601(` + endDate + `)
-        sort c.snippet.totalReplyCount desc, c.snippet.topLevelComment.snippet.likeCount//, to_number(version.statistics.likeCount) desc
+        filter c.snippet.videoId IN ` + idArray + `
+        let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
+        let sent = c.analysis.sentiment
+        filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601("` + startDate + `") AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601("` + endDate + `")
+        ` + order + `
         limit  ` + nbComments + `
         
         let version = first(flatten(for v in VideoMetadata filter v._key == c.snippet.videoId return v))
         let song = first(flatten(for r in Request filter r._id == version.request_id
-                    return (for s in Song filter s._key == r.songId return s)))//return (for s in 1 outbound r requestedAbout return s))
-        /*
-    let reply = flatten(for c in comments
-        //for r in Reply filter r.snippet.parentId == c._key //Does not seem to be faster than the traversal
-        return (for r in inbound c repliedTo
-            return r))
-*/
+                    return (for s in Song filter s._key == r.songId return s)))
+        let reply = flatten((for r in inbound c repliedTo return r))
         
         return {
             "commentID": c._key,
             "versionID": c.snippet.videoId,
             "interpret": song.artist,
             "songName": song.title,
-            "sentiment": [
-                // in there the 3 different analysis objects
-            ],
+            "sentiment": sent,
             "commentText": c.snippet.topLevelComment.snippet.textOriginal,
             "commentAuthor": c.snippet.topLevelComment.snippet.authorDisplayName,
-            "replies": [
-                // here goes an array of all replies to this comment
-                ],
+            "replies": reply,
             "likes": c.snippet.topLevelComment.snippet.likeCount,
             "dateTime": c.snippet.topLevelComment.snippet.publishedAt
         })
@@ -315,12 +335,12 @@ router.get('/comments/:value', function (req, res) {
 // TOPIC ///////////////////////////////////////////////////////////////////////////////////////////////////////// */
 var NLTKwords_en = ['#', '@', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you','re', 've', 'll', 'd', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 's', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'this', 'that', 'these', 'those', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'having', 'do', 'does', 'did', 'doing', 'a', 'an', 'the', 'and', 'but', 'if', 'or', 'because', 'as', 'until', 'while', 'of', 'at', 'by', 'for', 'with', 'about', 'against', 'between', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'to', 'from', 'up', 'down', 'in', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'don',  'should',  'now', 'd', 'll', 'm', 'o', 're', 've', 'y', 'ain', 'aren',  'couldn', 'didn', 'doesn', 'hadn', 'hasn',  'haven', 'isn', 'ma', 'mightn', 'mustn', 'needn', 't', 'shan', 'shouldn', 'wasn', 'weren', 'won', 'wouldn']; 
 var stopwords_de = ['#', '@', 'a', 'ab', 'aber', 'ach', 'acht', 'achte', 'achten', 'achter', 'achtes', 'ag', 'alle', 'allein', 'allem', 'allen', 'aller', 'allerdings', 'alles', 'allgemeinen', 'als', 'also', 'am', 'an', 'ander', 'andere', 'anderem', 'anderen', 'anderer', 'anderes', 'anderm', 'andern', 'anderr', 'anders', 'au', 'auch', 'auf', 'aus', 'ausser', 'ausserdem', 'außer', 'außerdem', 'b', 'bald', 'bei', 'beide', 'beiden', 'beim', 'beispiel', 'bekannt', 'bereits', 'besonders', 'besser', 'besten', 'bin', 'bis', 'bisher', 'bist', 'c', 'd', 'd.h', 'da', 'dabei', 'dadurch', 'dafür', 'dagegen', 'daher', 'dahin', 'dahinter', 'damals', 'damit', 'danach', 'daneben', 'dank', 'dann', 'daran', 'darauf', 'daraus', 'darf', 'darfst', 'darin', 'darum', 'darunter', 'darüber', 'das', 'dasein', 'daselbst', 'dass', 'dasselbe', 'davon', 'davor', 'dazu', 'dazwischen', 'daß', 'dein', 'deine', 'deinem', 'deinen', 'deiner', 'deines', 'dem', 'dementsprechend', 'demgegenüber', 'demgemäss', 'demgemäß', 'demselben', 'demzufolge', 'den', 'denen', 'denn', 'denselben', 'der', 'deren', 'derer', 'derjenige', 'derjenigen', 'dermassen', 'dermaßen', 'derselbe', 'derselben', 'des', 'deshalb', 'desselben', 'dessen', 'deswegen', 'dich', 'die', 'diejenige', 'diejenigen', 'dies', 'diese', 'dieselbe', 'dieselben', 'diesem', 'diesen', 'dieser', 'dieses', 'dir', 'doch', 'dort', 'drei', 'drin', 'dritte', 'dritten', 'dritter', 'drittes', 'du', 'durch', 'durchaus', 'durfte', 'durften', 'dürfen', 'dürft', 'e', 'eben', 'ebenso', 'ehrlich', 'ei', 'ei, ', 'eigen', 'eigene', 'eigenen', 'eigener', 'eigenes', 'ein', 'einander', 'eine', 'einem', 'einen', 'einer', 'eines', 'einig', 'einige', 'einigem', 'einigen', 'einiger', 'einiges', 'einmal', 'eins', 'elf', 'en', 'ende', 'endlich', 'entweder', 'er', 'ernst', 'erst', 'erste', 'ersten', 'erster', 'erstes', 'es', 'etwa', 'etwas', 'euch', 'euer', 'eure', 'eurem', 'euren', 'eurer', 'eures', 'f', 'folgende', 'früher', 'fünf', 'fünfte', 'fünften', 'fünfter', 'fünftes', 'für', 'g', 'gab', 'ganz', 'ganze', 'ganzen', 'ganzer', 'ganzes', 'gar', 'gedurft', 'gegen', 'gegenüber', 'gehabt', 'gehen', 'geht', 'gekannt', 'gekonnt', 'gemacht', 'gemocht', 'gemusst', 'genug', 'gerade', 'gern', 'gesagt', 'geschweige', 'gewesen', 'gewollt', 'geworden', 'gibt', 'ging', 'gleich', 'gott', 'gross', 'grosse', 'grossen', 'grosser', 'grosses', 'groß', 'große', 'großen', 'großer', 'großes', 'gut', 'gute', 'guter', 'gutes', 'h', 'hab', 'habe', 'haben', 'habt', 'hast', 'hat', 'hatte', 'hatten', 'hattest', 'hattet', 'heisst', 'her', 'heute', 'hier', 'hin', 'hinter', 'hoch', 'hätte', 'hätten', 'i', 'ich', 'ihm', 'ihn', 'ihnen', 'ihr', 'ihre', 'ihrem', 'ihren', 'ihrer', 'ihres', 'im', 'immer', 'in', 'indem', 'infolgedessen', 'ins', 'irgend', 'ist', 'j', 'ja', 'jahr', 'jahre', 'jahren', 'je', 'jede', 'jedem', 'jeden', 'jeder', 'jedermann', 'jedermanns', 'jedes', 'jedoch', 'jemand', 'jemandem', 'jemanden', 'jene', 'jenem', 'jenen', 'jener', 'jenes', 'jetzt', 'k', 'kam', 'kann', 'kannst', 'kaum', 'kein', 'keine', 'keinem', 'keinen', 'keiner', 'keines', 'kleine', 'kleinen', 'kleiner', 'kleines', 'kommen', 'kommt', 'konnte', 'konnten', 'kurz', 'können', 'könnt', 'könnte', 'l', 'lang', 'lange', 'leicht', 'leide', 'lieber', 'los', 'm', 'machen', 'macht', 'machte', 'mag', 'magst', 'mahn', 'mal', 'man', 'manche', 'manchem', 'manchen', 'mancher', 'manches', 'mann', 'mehr', 'mein', 'meine', 'meinem', 'meinen', 'meiner', 'meines', 'mensch', 'menschen', 'mich', 'mir', 'mit', 'mittel', 'mochte', 'mochten', 'morgen', 'muss', 'musst', 'musste', 'mussten', 'muß', 'mußt', 'möchte', 'mögen', 'möglich', 'mögt', 'müssen', 'müsst', 'müßt', 'n', 'na', 'nach', 'nachdem', 'nahm', 'natürlich', 'neben', 'nein', 'neue', 'neuen', 'neun', 'neunte', 'neunten', 'neunter', 'neuntes', 'nicht', 'nichts', 'nie', 'niemand', 'niemandem', 'niemanden', 'noch', 'nun', 'nur', 'o', 'ob', 'oben', 'oder', 'offen', 'oft', 'ohne', 'ordnung', 'p', 'q', 'r', 'recht', 'rechte', 'rechten', 'rechter', 'rechtes', 'richtig', 'rund', 's', 'sa', 'sache', 'sagt', 'sagte', 'sah', 'satt', 'schlecht', 'schluss', 'schon', 'sechs', 'sechste', 'sechsten', 'sechster', 'sechstes', 'sehr', 'sei', 'seid', 'seien', 'sein', 'seine', 'seinem', 'seinen', 'seiner', 'seines', 'seit', 'seitdem', 'selbst', 'sich', 'sie', 'sieben', 'siebente', 'siebenten', 'siebenter', 'siebentes', 'sind', 'so', 'solang', 'solche', 'solchem', 'solchen', 'solcher', 'solches', 'soll', 'sollen', 'sollst', 'sollt', 'sollte', 'sollten', 'sondern', 'sonst', 'soweit', 'sowie', 'später', 'startseite', 'statt', 'steht', 'suche', 't', 'tag', 'tage', 'tagen', 'tat', 'teil', 'tel', 'tritt', 'trotzdem', 'tun', 'u', 'uhr', 'um', 'und', 'und?', 'uns', 'unse', 'unsem', 'unsen', 'unser', 'unsere', 'unserer', 'unses', 'unter', 'v', 'vergangenen', 'viel', 'viele', 'vielem', 'vielen', 'vielleicht', 'vier', 'vierte', 'vierten', 'vierter', 'viertes', 'vom', 'von', 'vor', 'w', 'wahr?', 'wann', 'war', 'waren', 'warst', 'wart', 'warum', 'was', 'weg', 'wegen', 'weil', 'weit', 'weiter', 'weitere', 'weiteren', 'weiteres', 'welche', 'welchem', 'welchen', 'welcher', 'welches', 'wem', 'wen', 'wenig', 'wenige', 'weniger', 'weniges', 'wenigstens', 'wenn', 'wer', 'werde', 'werden', 'werdet', 'weshalb', 'wessen', 'wie', 'wieder', 'wieso', 'will', 'willst', 'wir', 'wird', 'wirklich', 'wirst', 'wissen', 'wo', 'woher', 'wohin', 'wohl', 'wollen', 'wollt', 'wollte', 'wollten', 'worden', 'wurde', 'wurden', 'während', 'währenddem', 'währenddessen', 'wäre', 'würde', 'würden', 'x', 'y', 'z', 'z.b', 'zehn', 'zehnte', 'zehnten', 'zehnter', 'zehntes', 'zeit', 'zu', 'zuerst', 'zugleich', 'zum', 'zunächst', 'zur', 'zurück', 'zusammen', 'zwanzig', 'zwar', 'zwei', 'zweite', 'zweiten', 'zweiter', 'zweites', 'zwischen', 'zwölf', 'über', 'überhaupt', 'übrigens'];
-var data = [];
-var commentsAll = 0;
-var commentsUsed = 0;
-var dataCloud = [];
-var listSongs = [];
-var wordCounted = [];
+let data = [];
+let commentsAll = 0;
+let commentsUsed = 0;
+let dataCloud = [];
+let listSongs = [];
+let wordCounted = [];
 
 router.get('/songTopics/:value', function (req, res) {
     let idArray = req.pathParams.value;
@@ -345,10 +365,11 @@ router.get('/songTopics/:value', function (req, res) {
     `;
     let keys;
     keys = db._query(query).toArray();
-    data = keys[0].comment;
+    keys.forEach((res) => { data = data.concat(res.comment) });
     createWordCloud();
     keys = {'commentsAll': commentsAll, 'commentsUsed': commentsUsed, 'dataCloud': dataCloud, 'listSongs': listSongs, 'wordCounted': wordCounted};
     res.send(keys);
+    data = []; dataCloud = []; listSongs = []; wordCounted = []; commentsAll = 0; commentsUsed = 0;
 })
 .response(joi.object().required(), 'Returns topic analysis for a given array of video ids')
 .summary('Returns topic analysis for idArray')
@@ -475,7 +496,7 @@ function getColor(sent) {
 function removeStopwords(array, stopWordList){
 	stopWordList.forEach((stopWord) => {
         for (var i=array.length-1; i>=0; i--) {
-		    if (array[i].trim().toLowerCase() === stopWord.trim().toLowerCase() || array[i].length === 1) {
+		    if (array[i].trim().toLowerCase() === stopWord.trim().toLowerCase() || array[i].length <= 2) {
 		        array.splice(i, 1);
 		    }
 		}
