@@ -254,7 +254,7 @@ router.get('/songStatistics/:value', function (req, res) {
 
 router.get('/comments/:value', function (req, res) {
     let allValues = JSON.parse(req.pathParams.value);
-    let idArray = allValues.idArray;
+    let idArray = JSON.stringify(allValues.idArray);
     let startDate = "2000-01-29T15:48:52.000Z";
     let endDate = "3000-12-29T15:48:52.000Z";
     let nbComments = 25;
