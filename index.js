@@ -253,11 +253,35 @@ router.get('/songStatistics/:value', function (req, res) {
 
 
 router.get('/comments/:value', function (req, res) {
-    let idArray = req.pathParams.value;
-    let startDate = `"2017-06-29T15:48:52.000Z"`;
-    let endDate = `"2018-06-29T15:48:52.000Z"`;
-    let nbComments = 5;
-    
+    let allValues = JSON.parse(req.pathParams.value);
+    let idArray = allValues.idArray;
+    let startDate = "2000-01-29T15:48:52.000Z";
+    let endDate = "3000-12-29T15:48:52.000Z";
+    let nbComments = 25;
+    let order = '';
+
+    if (allValues.startDate) startDate = allValues.startDate;
+    if (allValues.endDate) endDate = allValues.endDate;
+    if (allValues.nbComments) nbComments = allValues.nbComments;
+    if (allValues.order) {
+        switch(allValues.order){
+            case 'repliesAsc':
+                order = 'sort c.snippet.totalReplyCount asc'; break;
+            case 'repliesDesc':
+                order = 'sort c.snippet.totalReplyCount desc'; break;
+            case 'likesAsc':
+                order = 'sort c.snippet.topLevelComment.snippet.likeCount asc'; break;
+            case 'likesDesc':
+                order = 'sort c.snippet.topLevelComment.snippet.likeCount desc'; break;
+            case 'dateAsc':
+                order = 'sort date asc'; break;
+            case 'dateDesc':
+                order = 'sort date desc'; break;
+            default:
+                order = '';
+        }
+    }
+
     let query = `
     /* Parameter examples:
     ["eROJBYpkUMg","twqM56f_cVo"]
@@ -266,35 +290,27 @@ router.get('/comments/:value', function (req, res) {
     5
     */
     let comments = ( for c in Comments
-        filter c.snippet.videoId IN  ` + idArray + `
-        //let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
-        filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601(` + startDate + `) AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601(` + endDate + `)
-        sort c.snippet.totalReplyCount desc, c.snippet.topLevelComment.snippet.likeCount//, to_number(version.statistics.likeCount) desc
+        filter c.snippet.videoId IN ` + idArray + `
+        let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
+        let sent = c.analysis.sentiment
+        filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601("` + startDate + `") AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601("` + endDate + `")
+        ` + order + `
         limit  ` + nbComments + `
         
         let version = first(flatten(for v in VideoMetadata filter v._key == c.snippet.videoId return v))
         let song = first(flatten(for r in Request filter r._id == version.request_id
-                    return (for s in Song filter s._key == r.songId return s)))//return (for s in 1 outbound r requestedAbout return s))
-        /*
-    let reply = flatten(for c in comments
-        //for r in Reply filter r.snippet.parentId == c._key //Does not seem to be faster than the traversal
-        return (for r in inbound c repliedTo
-            return r))
-*/
+                    return (for s in Song filter s._key == r.songId return s)))
+        let reply = flatten((for r in inbound c repliedTo return r))
         
         return {
             "commentID": c._key,
             "versionID": c.snippet.videoId,
             "interpret": song.artist,
             "songName": song.title,
-            "sentiment": [
-                // in there the 3 different analysis objects
-            ],
+            "sentiment": sent,
             "commentText": c.snippet.topLevelComment.snippet.textOriginal,
             "commentAuthor": c.snippet.topLevelComment.snippet.authorDisplayName,
-            "replies": [
-                // here goes an array of all replies to this comment
-                ],
+            "replies": reply,
             "likes": c.snippet.topLevelComment.snippet.likeCount,
             "dateTime": c.snippet.topLevelComment.snippet.publishedAt
         })
