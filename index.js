@@ -167,7 +167,11 @@ for c in Comments
     let langDistrib = (for c in comments 
         collect language = c.c.analysis.mainLanguage with count into nbComments 
         return {"language": language, "nbComments": nbComments})
-    
+
+    let likedComments = (for c in comments 
+        let countLikes = (c.c.snippet.topLevelComment.snippet.likeCount > 0 ? 1 : 0)
+        collect aggregate mcount = SUM(countLikes)
+        RETURN {"count": mcount})
     
     let sentimentDistrib = (for c in comments
 
@@ -193,7 +197,7 @@ for c in Comments
             
         return {"positive": numberOfPositiveComments, "negative": numberOfNegativeComments, "neutral": numberOfNeutral, "NAs": numberOfNAs, "mixed": numberOfMixed})
     
-    return {"publishedAt": publishedAt, "nbComments": length(comments), "languageDistribution": langDistrib, "sentimentDistribution": sentimentDistrib}
+    return {"publishedAt": publishedAt, "nbComments": length(comments), "likedComments": likedComments[0].count, "languageDistribution": langDistrib, "sentimentDistribution": sentimentDistrib}
     )
 
 return {"videoIds": ` + idArray + `, "aggregations": agg}
@@ -476,7 +480,7 @@ function getColor(sent) {
 function removeStopwords(array, stopWordList){
 	stopWordList.forEach((stopWord) => {
         for (var i=array.length-1; i>=0; i--) {
-		    if (array[i].trim().toLowerCase() === stopWord.trim().toLowerCase() || array[i].length === 1) {
+		    if (array[i].trim().toLowerCase() === stopWord.trim().toLowerCase() || array[i].length <= 2) {
 		        array.splice(i, 1);
 		    }
 		}
