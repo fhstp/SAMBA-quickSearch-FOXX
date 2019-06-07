@@ -154,7 +154,7 @@ router.get('/songAggregations/:value', function (req, res) {
     let idArray = req.pathParams.value;
     //let filter = filterQuery(search);
     let query = `
-//key example : ["twqM56f_cVo"] (Parov Stelar) or ["eROJBYpkUMg"]
+//key example : ["iHr6xhFUDzc"] 
 let NA = 42
 let MIXED_SENT = 666
 let agg = (
@@ -175,17 +175,19 @@ for c in Comments
     
     let sentimentDistrib = (for c in comments
 
-        let mixed = (
-            for tool in [c.c.analysis.sentiment.nltk.compound, c.c.analysis.sentiment.textBlob.polarity, c.c.analysis.sentiment.afinn.normalized]
-            collect
-            AGGREGATE 
-                posCount = SUM(tool > 0 ? 1 : 0),
-                negCount = SUM(tool < 0 ? 1 : 0)
-                
-            return {"mixed":(posCount > 0 and negCount > 0 ? true : false)/*, "posCount": posCount, "negCount":negCount*/})
+        // Check for inconsistencies
+        let posCount = SUM([(c.c.analysis.sentiment.nltk.compound > 0 ? 1 : 0),
+            (c.c.analysis.sentiment.afinn.normalized > 0 ? 1 : 0),
+            (c.c.analysis.sentiment.afinn.normalized > 0 ? 1 : 0)])
             
-        let sentiment = (!c.c.analysis.sentiment ? NA : ( mixed.mixed ? MIXED_SENT :
-            AVERAGE([c.c.analysis.sentiment.nltk.compound, c.c.analysis.sentiment.textBlob.polarity, c.c.analysis.sentiment.afinn.normalized])))
+        let negCount = SUM([(c.c.analysis.sentiment.nltk.compound < 0 ? 1 : 0),
+            (c.c.analysis.sentiment.afinn.normalized < 0 ? 1 : 0),
+            (c.c.analysis.sentiment.afinn.normalized < 0 ? 1 : 0)])
+            
+        let isInconsistent = (posCount > 0 AND negCount > 0 ? 1 : 0)
+        
+        // Calculate sentiment
+        let sentiment = (!c.c.analysis.sentiment ? NA : ( isInconsistent > 0 ? MIXED_SENT : AVERAGE([c.c.analysis.sentiment.nltk.compound, c.c.analysis.sentiment.textBlob.polarity, c.c.analysis.sentiment.afinn.normalized])))
         
         collect
         AGGREGATE 
