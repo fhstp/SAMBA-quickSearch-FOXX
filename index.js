@@ -345,7 +345,13 @@ let listSongs = [];
 let wordCounted = [];
 
 router.get('/songTopics/:value', function (req, res) {
-    let idArray = req.pathParams.value;
+    let allValues = JSON.parse(req.pathParams.value);
+    let idArray = JSON.stringify(allValues.idArray);
+    let startDate = "2000-01-29T15:48:52.000Z";
+    let endDate = "3000-12-29T15:48:52.000Z";
+
+    if (allValues.startDate) startDate = allValues.startDate;
+    if (allValues.endDate) endDate = allValues.endDate;
     let query = `
     for version in VideoMetadata
     Filter version._key IN ` + idArray + `
@@ -360,6 +366,8 @@ router.get('/songTopics/:value', function (req, res) {
             
     let comment = flatten(
         for c in Comments filter c.snippet.videoId == version._key
+        let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
+        filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601("` + startDate + `") AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601("` + endDate + `")
         return {"analysis": c.analysis, "song" : song.title, "text" : c.snippet.topLevelComment.snippet.textOriginal}
     )
         
