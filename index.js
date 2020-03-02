@@ -368,7 +368,7 @@ router.get('/songTopics/:value', function (req, res) {
         for c in Comments filter c.snippet.videoId == version._key
         let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
         filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601("` + startDate + `") AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601("` + endDate + `")
-        return {"analysis": c.analysis, "song" : song.title, "text" : c.snippet.topLevelComment.snippet.textOriginal}
+        return {"analysis": c.analysis, "song" : CONCAT( [song.title, "_SAMBASONGID_", c.snippet.videoId] ) , "text" : c.snippet.topLevelComment.snippet.textOriginal, "commentId" : c._key}
     )
         
     return {comment}
@@ -412,7 +412,7 @@ function createWordCloud() {
 	    });
 
 	    if (listSongs.indexOf(d.song.toString()) === -1) {
-	      listSongs.push(d.song.toString());
+          listSongs.push(d.song.toString());
 	    }
 	  }
 	});
@@ -480,7 +480,7 @@ function counter(words) {
 	var dataForCloud = [];
 	if (cWds.length > 0) {
 	  cWds.sort(function(a, b) { return b.count - a.count; });
-	  wordCounted = cWds;
+      wordCounted = cWds.slice(0, 500);
 
 	  // Get 10 topics. If the list of counted words has less then 10 words we display only the existing topics
 	  var size = 10;
