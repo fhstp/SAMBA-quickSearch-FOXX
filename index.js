@@ -368,7 +368,7 @@ router.get('/songTopics/:value', function (req, res) {
         for c in Comments filter c.snippet.videoId == version._key
         let date = DATE_FORMAT(c.snippet.topLevelComment.snippet.publishedAt, "%yyyy-%mm-%dd")
         filter c.snippet.topLevelComment.snippet.publishedAt > DATE_ISO8601("` + startDate + `") AND c.snippet.topLevelComment.snippet.publishedAt < DATE_ISO8601("` + endDate + `")
-        return {"analysis": c.analysis, "song" : CONCAT( [song.title, "_SAMBASONGID_", c.snippet.videoId] ) , "text" : c.snippet.topLevelComment.snippet.textOriginal, "commentId" : c._key}
+        return {"analysis": c.analysis, "song" : version.snippet.title , "text" : c.snippet.topLevelComment.snippet.textOriginal, "commentId" : c._key}
     )
         
     return {comment}
@@ -388,36 +388,36 @@ router.get('/songTopics/:value', function (req, res) {
 /* TOPIC AUXILIARY FUNCTIONS ///////////////////////////////////////////////////////////////////////////////////// */
 
 function createWordCloud() {
-	var words = [];
-	// Tokenize and clean each [english/german] comment
-	data.forEach((d) => {
-		commentsAll++;
-	  if (d.analysis && (d.analysis.mainLanguage === 'en' || d.analysis.mainLanguage === 'de')) {
-	  	commentsUsed++;
-	    var topicSent = getSentiment(d);	// get sentiments from comment
+    var words = [];
+    // Tokenize and clean each [english/german] comment
+    data.forEach((d) => {
+        commentsAll++;
+        if (d.analysis && (d.analysis.mainLanguage === 'en' || d.analysis.mainLanguage === 'de')) {
+            commentsUsed++;
+            var topicSent = getSentiment(d);	// get sentiments from comment
 
-	    // tokenize comment string
-	    let word_tokens = d.text.split(/[^a-zA-Z0-9_#@\u00dc\u00fc\u00c4\u00e4\u00d6\u00f6\u00df]+/);
-	    while (word_tokens.indexOf('') !== -1) { word_tokens.splice( word_tokens.indexOf(''), 1); }
+            // tokenize comment string
+            let word_tokens = d.text.split(/[^a-zA-Z0-9_#@\u00dc\u00fc\u00c4\u00e4\u00d6\u00f6\u00df]+/);
+            while (word_tokens.indexOf('') !== -1) { word_tokens.splice( word_tokens.indexOf(''), 1); }
 
-	    // Remove stopwords according to language
-		if (d.analysis.mainLanguage === 'en') {
-			word_tokens = removeStopwords(word_tokens, NLTKwords_en);
-		} else if (d.analysis.mainLanguage === 'de') {
-			word_tokens = removeStopwords(word_tokens, stopwords_de);
-		}
-	    
-	    word_tokens.forEach((word) => {
-	      words.push({ topic: word, sentiment: topicSent, song: d.song });
-	    });
+            // Remove stopwords according to language
+            if (d.analysis.mainLanguage === 'en') {
+                word_tokens = removeStopwords(word_tokens, NLTKwords_en);
+            } else if (d.analysis.mainLanguage === 'de') {
+                word_tokens = removeStopwords(word_tokens, stopwords_de);
+            }
 
-	    if (listSongs.indexOf(d.song.toString()) === -1) {
-          listSongs.push(d.song.toString());
-	    }
-	  }
-	});
+            word_tokens.forEach((word) => {
+                words.push({ topic: word, sentiment: topicSent, song: d.song });
+            });
 
-	counter(words);
+            if (listSongs.indexOf(d.song.toString()) === -1) {
+                listSongs.push(d.song.toString());
+            }
+        }
+    });
+
+    counter(words);
 }
 
 function getSentiment(d) {
